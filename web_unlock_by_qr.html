@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Unlock Quote — Acceso por QR</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#7dd3fc;--muted:#94a3b8}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    body{display:grid;place-items:center;background:linear-gradient(180deg,#071022 0%, #07192a 100%);color:#e6eef8}
+    .card{width:100%;max-width:760px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:28px;box-shadow:0 8px 30px rgba(2,6,23,.6)}
+    h1{margin:0 0 8px;font-size:20px}
+    p.muted{color:var(--muted);margin:6px 0 18px}
+    .row{display:flex;gap:12px;align-items:center}
+    .input{flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:transparent;color:inherit}
+    .btn{padding:10px 12px;border-radius:8px;border:0;background:var(--accent);color:#042029;font-weight:600;cursor:pointer}
+    .small{font-size:13px;color:var(--muted)}
+    .hiddenText{margin-top:18px;padding:14px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,.03)}
+    .qrwrap{display:flex;gap:18px;align-items:center;margin-top:14px}
+    .qrbox{padding:12px;background:rgba(255,255,255,0.02);border-radius:8px}
+    .note{margin-top:12px;color:var(--muted);font-size:13px}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    .success{color:#bbf7d0}
+    a.link{color:#7dd3fc;text-decoration:underline}
+  </style>
+</head>
+<body>
+  <main class="card" role="main">
+    <h1>Acceso con contraseña (vía QR)</h1>
+    <p class="muted">Escaneá el QR que acompaña a una frase de película o serie. En la web tenés que escribir el nombre de quien la dijo para desbloquear la sorpresa.</p>
+
+    <div id="promptArea">
+      <p class="small">Frase mostrada (pista):</p>
+      <blockquote id="shownQuote" style="margin:6px 0 12px;padding:12px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,.03);">Cargando...</blockquote>
+
+      <div class="row">
+        <input id="passwordInput" class="input" placeholder="Introduce el nombre (ej: Daphne)" autocomplete="off" />
+        <button id="unlockBtn" class="btn">Desbloquear</button>
+      </div>
+      <div id="result" class="note"></div>
+
+      <div id="unlocked" class="hiddenText" style="display:none">
+        <strong>Frase desbloqueada:</strong>
+        <p id="hiddenQuote" style="margin:8px 0 0;font-size:16px"></p>
+      </div>
+    </div>
+
+    <hr style="margin:18px 0;border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+
+    <div>
+      <h2 style="font-size:16px;margin:0 0 8px">Generador de QR para esta página</h2>
+      <p class="small">Elegí el identificador de la frase (id) que quieras publicar y presioná "Generar QR". Copiá/descargá ese QR y pegalo donde quieras para que la gente lo escanee.</p>
+      <div class="row" style="margin-top:8px">
+        <input id="idInput" class="input" placeholder="Ej: quote3" value="quote3" />
+        <button id="genQrBtn" class="btn">Generar QR</button>
+      </div>
+      <div class="qrwrap">
+        <div id="qrcode" class="qrbox"></div>
+        <div>
+          <div class="small">URL resultado:</div>
+          <div id="resultUrl" class="small" style="word-break:break-all"></div>
+          <div style="margin-top:8px">
+            <button id="copyUrl" class="btn" style="padding:8px 10px;">Copiar URL</button>
+          </div>
+        </div>
+      </div>
+      <div class="note">Consejo: subí este archivo a tu hosting (o a GitHub Pages) y usá la URL pública. El parámetro <code>?id=</code> define qué pista aparece.</div>
+    </div>
+
+    <footer>Instrucciones rápidas: al subir el archivo y generar un QR con <code>?id=quote3</code>, el que escanee deberá responder con el nombre correcto para ver la sorpresa.</footer>
+  </main>
+
+  <!-- Dependencia QR: qrcodejs (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    // Mapa de frases
+    const quotes = {
+      quote1: {
+        shown: "\"I'm so cold, my snots are frozen!\"",
+        answer: ['sid','sid the sloth'],
+        hidden: "\"Some people think I'm lazy, but I prefer 'energy efficient'.\" — Sid"
+      },
+      quote2: {
+        shown: "\"Great... more ice. Now what?\"",
+        answer: ['manny','manny the mammoth'],
+        hidden: "\"We stick together. That's how families survive.\" — Manny"
+      },
+      quote3: {
+        shown: "\"I burn for you.\"",
+        answer: ['daphne','daphne bridgerton'],
+        hidden: '<a class="link" href="https://maps.app.goo.gl/vjxC4aTnaPMZu3zT9" target="_blank">Abrí este enlace secreto 🔗</a>'
+      }
+    };
+
+    function getIdFromQuery(){
+      const p = new URLSearchParams(location.search);
+      return p.get('id') || 'quote3';
+    }
+
+    function normalize(s){
+      return (s||'').toString().trim().toLowerCase();
+    }
+
+    const id = getIdFromQuery();
+    const entry = quotes[id] || {shown:'(id no encontrado)', answer:[], hidden:'(no hay frase)'};
+
+    document.getElementById('shownQuote').textContent = entry.shown;
+
+    document.getElementById('unlockBtn').addEventListener('click', tryUnlock);
+    document.getElementById('passwordInput').addEventListener('keydown', e=>{ if(e.key==='Enter') tryUnlock(); });
+
+    function tryUnlock(){
+      const val = normalize(document.getElementById('passwordInput').value);
+      const result = document.getElementById('result');
+      if(!val){ result.textContent = 'Introducí un nombre.'; return; }
+      const ok = entry.answer.some(a => normalize(a) === val);
+      if(ok){
+        document.getElementById('unlocked').style.display = 'block';
+        document.getElementById('hiddenQuote').innerHTML = entry.hidden;
+        result.innerHTML = '<span class="success">¡Correcto! Se ha desbloqueado el contenido secreto.</span>';
+      } else {
+        result.textContent = 'No es correcto. Probá con el nombre del personaje (por ejemplo: Daphne).';
+      }
+    }
+
+    const qrcodeEl = document.getElementById('qrcode');
+    let qr;
+    function genQrWithId(chosenId){
+      const base = location.origin + location.pathname;
+      const full = base + '?id=' + encodeURIComponent(chosenId);
+      document.getElementById('resultUrl').textContent = full;
+      qrcodeEl.innerHTML = '';
+      qr = new QRCode(qrcodeEl, {text: full, width:160, height:160, correctLevel: QRCode.CorrectLevel.H});
+    }
+
+    document.getElementById('genQrBtn').addEventListener('click', ()=>{
+      const chosen = document.getElementById('idInput').value.trim() || 'quote3';
+      genQrWithId(chosen);
+    });
+
+    document.getElementById('idInput').value = id;
+    genQrWithId(id);
+
+    document.getElementById('copyUrl').addEventListener('click', ()=>{
+      const t = document.getElementById('resultUrl').textContent;
+      navigator.clipboard && navigator.clipboard.writeText(t).then(()=>{
+        alert('URL copiada al portapapeles');
+      }, ()=>{ alert('No se pudo copiar. Seleccioná y copia manualmente.'); });
+    });
+  </script>
+</body>
+</html>
